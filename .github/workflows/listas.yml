@@ -1,0 +1,33 @@
+name: Armar listas
+
+on:
+  schedule:
+    - cron: "0 9 * * *"   # todos los dias ~5 AM Nueva York
+  workflow_dispatch:       # boton para correrlo a mano
+  push:
+    branches: [main]
+    paths: ["cajas.csv", "armar.py"]   # corre solo al editar cajas.csv
+
+permissions:
+  contents: write
+
+jobs:
+  armar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bajar el repo
+        run: git clone --depth 1 "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" repo
+
+      - name: Armar listas
+        working-directory: repo
+        run: python3 armar.py
+
+      - name: Publicar en gh-pages
+        working-directory: repo/salida
+        run: |
+          git init -q -b gh-pages
+          git config user.name "robot"
+          git config user.email "robot@users.noreply.github.com"
+          git add -A
+          git commit -q -m "listas $(date -u +%F)"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
