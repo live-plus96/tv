@@ -7,7 +7,18 @@ from zoneinfo import ZoneInfo
 
 FUENTE = "https://iptv-org.github.io/iptv/index.country.m3u"
 CANALES_API = "https://iptv-org.github.io/api/channels.json"
+PAISES_API = "https://iptv-org.github.io/api/countries.json"
+REGIONES_API = "https://iptv-org.github.io/api/regions.json"
 MENSAJE_VENCIDO = "SUSCRIPCION VENCIDA - CONTACTAR PARA RENOVAR"
+
+# Paises que entran en la lista: toda America (region AMER de iptv-org) + estos.
+PAISES_EXTRA = {
+    "CN", "IN", "JP", "KR", "SA",          # Asia
+    "ZA", "EG", "NG", "KE", "MA",          # Africa
+    "DE", "FR", "UK", "IT", "ES",          # Europa
+}
+# Canales sin pais fijo (feeds mundiales). Poner en False para sacarlos.
+INCLUIR_INTERNACIONAL = True
 
 # Solo contenido explicito. NO poner palabras como "adult" o "hot" (botan canales normales).
 PROHIBIDAS = re.compile(r"xxx|porn|er[oó]tic|playboy|hustler|brazzers|18\+", re.I)
@@ -53,18 +64,31 @@ def leer_m3u(texto):
     return cabecera, bloques
 
 
+def paises_permitidos():
+    regiones = json.loads(descargar(REGIONES_API))
+    america = set(next(r for r in regiones if r["code"] == "AMER")["countries"])
+    codigos = america | PAISES_EXTRA
+    nombres = {p["name"] for p in json.loads(descargar(PAISES_API)) if p["code"] in codigos}
+    if INCLUIR_INTERNACIONAL:
+        nombres.add("International")
+    return nombres
+
+
 def main():
     nsfw = {c["id"] for c in json.loads(descargar(CANALES_API)) if c.get("is_nsfw")}
+    permitidos = paises_permitidos()
     cabecera, bloques = leer_m3u(descargar(FUENTE))
     if len(bloques) < 1000:
         raise SystemExit(f"La fuente trajo solo {len(bloques)} canales, algo anda mal. No publico nada.")
 
-    buenos, sacados = [], {"geo": 0, "nsfw": 0, "palabras": 0}
+    buenos, sacados = [], {"geo": 0, "nsfw": 0, "palabras": 0, "pais": 0}
     for b in bloques:
         extinf = b[0]
         nombre = nombre_canal(extinf)
         tvg_id = atributo(extinf, "tvg-id")
-        if "geo-blocked" in nombre.lower():
+        if atributo(extinf, "group-title") not in permitidos:
+            sacados["pais"] += 1
+        elif "geo-blocked" in nombre.lower():
             sacados["geo"] += 1
         elif tvg_id.split("@")[0] in nsfw:
             sacados["nsfw"] += 1
@@ -72,6 +96,9 @@ def main():
             sacados["palabras"] += 1
         else:
             buenos.append("\n".join(b))
+
+    if len(buenos) < 1000:
+        raise SystemExit(f"Quedaron solo {len(buenos)} canales tras filtrar. No publico nada.")
 
     lista = cabecera + "\n" + "\n".join(buenos) + "\n"
     vencida = ("#EXTM3U\n"
@@ -103,6 +130,7 @@ def main():
                 vencidas += 1
 
     print(f"Fuente: {len(bloques)} canales | quedan {len(buenos)} | sacados: {sacados}")
+    print(f"Paises permitidos: {len(permitidos)}")
     print(f"Cajas activas: {activas} | vencidas: {vencidas} | fecha NY: {hoy}")
 
 
