@@ -95,20 +95,29 @@ def main():
         elif PROHIBIDAS.search(" ".join([nombre, tvg_id, atributo(extinf, "group-title")])):
             sacados["palabras"] += 1
         else:
-            buenos.append("\n".join(b))
+            buenos.append(b)
 
     if len(buenos) < 1000:
         raise SystemExit(f"Quedaron solo {len(buenos)} canales tras filtrar. No publico nada.")
 
-    lista = cabecera + "\n" + "\n".join(buenos) + "\n"
+    salida = Path("salida")
+    salida.mkdir(exist_ok=True)
+    hoy = datetime.now(ZoneInfo("America/New_York")).date()
+
+    # Paso nuevo: probar los canales y sacar los muertos (ver probar_canales.py).
+    # Si la prueba se rompe por lo que sea, se publica la lista sin filtrar.
+    try:
+        from probar_canales import filtrar_muertos
+        buenos = filtrar_muertos(buenos, hoy, salida)
+    except Exception as e:
+        print(f"La prueba de canales fallo ({e}). Publico la lista sin filtrar.")
+
+    lista = cabecera + "\n" + "\n".join("\n".join(b) for b in buenos) + "\n"
     vencida = ("#EXTM3U\n"
                f'#EXTINF:-1 group-title="AVISO",{MENSAJE_VENCIDO}\n'
                "http://127.0.0.1/vencida\n")
 
-    salida = Path("salida")
-    salida.mkdir(exist_ok=True)
     (salida / ".nojekyll").write_text("")
-    hoy = datetime.now(ZoneInfo("America/New_York")).date()
     activas = vencidas = 0
 
     with open("cajas.csv", encoding="utf-8-sig", newline="") as f:
