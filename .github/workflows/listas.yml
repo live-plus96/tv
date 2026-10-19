@@ -31,3 +31,17 @@ jobs:
           git add -A
           git commit -q -m "listas $(date -u +%F)"
           git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
+
+      - name: Guardar numeros de canal en main
+        working-directory: repo
+        run: |
+          git config user.name "robot"
+          git config user.email "robot@users.noreply.github.com"
+          git add numeros.tsv
+          if git diff --cached --quiet; then echo "numeros.tsv sin cambios"; exit 0; fi
+          git commit -q -m "numeros de canal $(date -u +%F)"
+          for i in 1 2 3; do
+            git push -q origin HEAD:main && exit 0
+            sleep 5; git pull -q --rebase origin main
+          done
+          echo "No pude guardar numeros.tsv"; exit 1
