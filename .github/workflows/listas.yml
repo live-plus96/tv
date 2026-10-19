@@ -2,7 +2,7 @@ name: Armar listas
 
 on:
   schedule:
-    - cron: "0 9 * * *"   # todos los dias ~5 AM Nueva York
+    - cron: "17 9 * * *"  # todos los dias ~5:17 AM Nueva York (minuto raro: GitHub atrasa menos)
   workflow_dispatch:       # boton para correrlo a mano
   push:
     branches: [main]
