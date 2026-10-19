@@ -20,6 +20,10 @@ PAISES_EXTRA = {
 # Canales sin pais fijo (feeds mundiales). Poner en False para sacarlos.
 INCLUIR_INTERNACIONAL = True
 
+# Numeros de canal fijos (tvg-chno). Una linea por canal: URL<TAB>numero.
+# El robot lo actualiza y lo guarda en main en cada corrida. No editar a mano.
+NUMEROS = Path("numeros.tsv")
+
 # Solo contenido explicito. NO poner palabras como "adult" o "hot" (botan canales normales).
 PROHIBIDAS = re.compile(r"xxx|porn|er[oó]tic|playboy|hustler|brazzers|18\+", re.I)
 
@@ -74,6 +78,40 @@ def paises_permitidos():
     return nombres
 
 
+def numerar(bloques):
+    """Pone tvg-chno="N" en cada canal. Un canal conserva su numero para siempre,
+    uno nuevo toma el mas alto + 1 y el de un canal eliminado no se reutiliza.
+    Si falta numeros.tsv no numera nada (la app usa su propia numeracion)."""
+    if not NUMEROS.exists():
+        print("Falta numeros.tsv: publico SIN numeros de canal (no numero desde cero).")
+        return bloques
+    numeros = {}
+    for linea in NUMEROS.read_text(encoding="utf-8").splitlines():
+        if "\t" in linea:
+            url, n = linea.rsplit("\t", 1)
+            numeros[url] = int(n)
+    if not numeros:
+        print("numeros.tsv vacio: publico SIN numeros de canal.")
+        return bloques
+    siguiente = max(numeros.values()) + 1
+    nuevos = 0
+    for b in bloques:
+        url = b[-1].strip()
+        if url not in numeros:
+            numeros[url] = siguiente
+            siguiente += 1
+            nuevos += 1
+    salida = []
+    for b in bloques:
+        extinf = re.sub(r'\s*tvg-chno="[^"]*"', "", b[0])
+        extinf = re.sub(r"^(#EXTINF:-?\d+)", rf'\1 tvg-chno="{numeros[b[-1].strip()]}"', extinf, count=1)
+        salida.append([extinf] + b[1:])
+    if nuevos:
+        NUMEROS.write_text("".join(f"{u}\t{n}\n" for u, n in numeros.items()), encoding="utf-8")
+    print(f"Numeros de canal: {len(bloques)} numerados | nuevos {nuevos} | mas alto {siguiente - 1}")
+    return salida
+
+
 def main():
     nsfw = {c["id"] for c in json.loads(descargar(CANALES_API)) if c.get("is_nsfw")}
     permitidos = paises_permitidos()
@@ -111,6 +149,11 @@ def main():
         buenos = filtrar_muertos(buenos, hoy, salida)
     except Exception as e:
         print(f"La prueba de canales fallo ({e}). Publico la lista sin filtrar.")
+
+    try:
+        buenos = numerar(buenos)
+    except Exception as e:
+        print(f"La numeracion fallo ({e}). Publico SIN numeros de canal.")
 
     lista = cabecera + "\n" + "\n".join("\n".join(b) for b in buenos) + "\n"
     vencida = ("#EXTM3U\n"
